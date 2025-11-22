@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bizim Kafe ☕</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- Tone.js Səs effektləri üçün -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- Font Awesome ikonları üçün -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Özəl şrift və fon stilləri */
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;600&display=swap');
+        body { font-family: 'Fredoka', sans-serif; background-color: #f5efe6; }
+        
+        /* Əsas fon şəkli */
+        .chat-bg {
+            background-color: #fdfbf7;
+            background-image: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23d6c099' fill-opacity='0.2' fill-rule='evenodd'%3E%3Ccircle cx='3' cy='3' r='3'/%3E%3Ccircle cx='13' cy='13' r='3'/%3E%3C/g%3E%3C/svg%3E");
+        }
+
+        /* Mesaj baloncukları */
+        .my-message {
+            background-color: #f7e6c4; /* Tünd Qəhvəyi/Bej */
+            border-radius: 1rem 1rem 0.2rem 1rem;
+        }
+        .other-message {
+            background-color: #a76657; /* Açıq Qəhvəyi */
+            color: #fff;
+            border-radius: 1rem 1rem 1rem 0.2rem;
+        }
+        .system-message {
+            color: #d97706; /* Kəhrəba Rəngi */
+            font-style: italic;
+        }
+
+        /* Reaksiya Animasiyaları */
+        .reaction-effect {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3rem;
+            opacity: 0;
+            animation: float-up 1.5s ease-out forwards;
+            pointer-events: none;
+            z-index: 1000;
+            text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        @keyframes float-up {
+            0% { transform: translate(-50%, 0%); opacity: 1; }
+            100% { transform: translate(-50%, -150%); opacity: 0; }
+        }
+
+        /* Fırlatma Animasiyası (Stəkan) */
+        .flip-animate {
+            animation: flip-rotate 1.5s ease-out forwards;
+        }
+        @keyframes flip-rotate {
+            0% { transform: rotate(0deg) scale(1); opacity: 1; }
+            50% { transform: rotate(180deg) scale(1.5); opacity: 1; }
+            100% { transform: rotate(360deg) scale(0.5); opacity: 0; }
+        }
+
+        /* Oyun Seçimi Dropdown Animasiyası */
+        .game-selector-enter { transform: scaleY(0); opacity: 0; }
+        .game-selector-enter-active { transform: scaleY(1); opacity: 1; transition: transform 200ms ease-out, opacity 200ms ease-out; }
+        .game-selector-exit { transform: scaleY(1); opacity: 1; }
+        .game-selector-exit-active { transform: scaleY(0); opacity: 0; transition: transform 200ms ease-in, opacity 200ms ease-in; }
+
+        /* Reaksiya Menyu */
+        .reaction-menu {
+            position: absolute;
+            bottom: 100%; /* Mesajın yuxarısında */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+        }
+    </style>
+</head>
+<body class="bg-f5efe6 min-h-screen p-2 sm:p-4 flex items-center justify-center">
+
+    <!-- Əsas Tətbiq Konteyneri -->
+    <div id="main-app" class="w-full max-w-lg lg:max-w-xl h-[95vh] flex flex-col rounded-xl shadow-2xl overflow-hidden bg-white">
+        
+        <!-- Giriş Paneli -->
+        <div id="join-panel" class="p-8 flex flex-col space-y-4 justify-center items-center h-full">
+            <h1 class="text-3xl font-bold text-red-800 mb-6 flex items-center">
+                <i class="fas fa-coffee mr-3"></i> Bizim Kafe
+            </h1>
+            <p class="text-gray-600 text-center">Anonim qrup söhbətinə və oyunlara qoşulun.</p>
+
+            <input type="text" id="username-input" placeholder="Adınızı daxil edin (Məsələn: Əli)"
+                   class="w-full p-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 transition duration-150">
+
+            <div class="w-full flex space-x-2">
+                <input type="text" id="group-id-input" placeholder="Qrup ID-si (Boş buraxın və ya daxil edin)"
+                       class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 transition duration-150">
+                <button onclick="joinGroup()"
+                        class="bg-red-800 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-200 flex items-center whitespace-nowrap">
+                    <i class="fas fa-sign-in-alt mr-2"></i> Qoşul
+                </button>
+            </div>
+            <div id="loading-spinner" class="hidden text-red-800 mt-4">
+                <i class="fas fa-spinner fa-spin text-2xl"></i>
+                <span class="ml-2">Qoşulur...</span>
+            </div>
+        </div>
+
+        <!-- Əsas Çat Paneli -->
+        <div id="chat-panel" class="flex flex-col flex-grow hidden">
+            
+            <!-- Başlıq / Kontrol Paneli -->
+            <header id="chat-header" class="p-3 bg-red-800 text-white flex justify-between items-center shadow-md z-10">
+                
+                <!-- Sol: Qrup Məlumatı -->
+                <div class="flex flex-col">
+                    <div class="font-bold text-lg">Bizim Kafe ☕</div>
+                    <div class="text-xs opacity-80" id="my-id-display-container">
+                        ID: <span id="my-id-display" class="font-mono cursor-pointer" onclick="copyId()">Yüklənir...</span> 
+                        <span id="copy-msg" class="ml-2 text-green-300 text-sm opacity-0 absolute bg-red-900 p-1 rounded-md">Kopyalandı!</span>
+                    </div>
+                </div>
+
+                <!-- Sağ: Oyun və Ayrılma Düymələri -->
+                <div class="flex space-x-2 relative">
+                    <!-- Oyunlar Button (Dropdown Trigger) -->
+                    <button onclick="toggleGameSelector()" class="bg-red-700 hover:bg-red-600 text-white font-medium py-2 px-3 rounded-lg transition duration-200 shadow-lg text-sm flex items-center">
+                        <i class="fas fa-gamepad mr-2"></i> Oyunlar
+                    </button>
+                    <!-- Qrupdan Ayrıl Düyməsi -->
+                    <button onclick="leaveGroup()" class="bg-red-700 hover:bg-red-600 text-white font-medium py-2 px-3 rounded-lg shadow-lg text-sm flex items-center">
+                        <i class="fas fa-sign-out-alt"></i> Ayrıl
+                    </button>
+                    
+                    <!-- Oyun Seçimi Dropdown Paneli (Əvvəlcə Gizli) -->
+                    <div id="game-selector" 
+                         class="absolute right-0 top-full mt-2 w-48 bg-white text-gray-800 rounded-xl shadow-2xl border border-gray-200 
+                                transform origin-top hidden game-selector-enter" 
+                         role="menu" aria-orientation="vertical" aria-labelledby="options-menu">
+                        
+                        <h3 class="p-3 text-sm font-bold border-b bg-gray-50 rounded-t-xl text-red-800">Oyun Seçin</h3>
+                        
+                        <!-- Mövcud Oyunlar -->
+                        <button onclick="selectGame('hangman')" role="menuitem"
+                                class="w-full text-left p-3 hover:bg-red-100 transition duration-150 flex items-center text-red-800 border-b">
+                            <i class="fas fa-gavel mr-2"></i> Kəllə-Kəlləyə
+                        </button>
+                        <button onclick="selectGame('secret_customer')" role="menuitem"
+                                class="w-full text-left p-3 hover:bg-red-100 transition duration-150 flex items-center text-red-800 border-b">
+                            <i class="fas fa-user-secret mr-2"></i> Gizli Müştəri
+                        </button>
+                        <button onclick="selectGame('quiz')" role="menuitem"
+                                class="w-full text-left p-3 hover:bg-red-100 transition duration-150 flex items-center text-red-800">
+                            <i class="fas fa-question-circle mr-2"></i> Quiz (Tezliklə)
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Çat Mesajları Sahəsi -->
+            <div id="messages-container" class="flex flex-col flex-grow overflow-hidden">
+                <!-- Oyun Statusu buraya daxil olur -->
+                <div id="game-status-display" class="p-3 bg-yellow-50 border border-yellow-300 rounded-lg m-3 shadow-inner hidden"></div>
+                <div id="messages" class="chat-bg flex-grow overflow-y-auto p-4 space-y-4">
+                    <!-- Mesajlar bura daxil olacaq -->
+                </div>
+            </div>
+
+            <!-- Mesaj Giriş Paneli -->
+            <div class="p-3 bg-white border-t border-gray-200 flex items-center">
+                <input type="text" id="message-input" placeholder="Mesajınızı yazın..."
+                       class="flex-grow p-3 border border-gray-300 rounded-l-lg focus:ring-red-500 focus:border-red-500 transition duration-150"
+                       onkeypress="handleKeyPress(event)">
+                <button onclick="sendMessage()"
+                        class="bg-red-800 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-r-lg shadow-md transition duration-200">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Reaksiya Efektləri üçün Konteyner -->
+    <div id="reaction-container"></div>
+
+    <script type="module">
+        // Firebase Konfiqurasiyası (Canvas Tərəfindən Təmin Edilir)
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Firebase və Firestore Importları
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, updateDoc, arrayUnion, arrayRemove, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Tone.js
+        const synth = new Tone.PolySynth(Tone.Synth).toDestination();
+
+        // Tətbiqi Başlat
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        
+        // Global State (Qlobal Vəziyyət)
+        let myPeerId = null;
+        let peer = null;
+        let connections = {};
+        let currentUserId = null;
+        let userName = 'Anonim';
+        let isGroupLeader = false;
+        let gameData = { game: null, state: null, myRole: null }; // myRole əlavə edildi
+        let peerCount = 0; // Qrupdakı istifadəçi sayı
+        let activeGroupId = null; // Hazırda qoşulmuş qrupun ID-si
+        let chatMessages = {}; // {messageId: {reactions: {tea: 2, flip: 1}, senderId: '...'}, ...}
+
+        // --- Auth və Firebase Başlanğıcı ---
+
+        // İstifadəçi Auth Məlumatını Yoxla və Firestore-u Başlat
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentUserId = user.uid;
+                console.log("Firebase Auth Hazırdır. User ID:", currentUserId);
+            } else {
+                console.error("Firebase Auth xətası: İstifadəçi tapılmadı.");
+            }
+        });
+
+        // Xüsusi token ilə daxil olmaq (Canvas üçün məcburidir)
+        async function signIn() {
+            try {
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Firebase daxil olma xətası:", error);
+            }
+        }
+        signIn();
+
+        // Firestore Məlumat Yolu
+        function getGroupDocRef(groupId) {
+            return doc(db, 'artifacts', appId, 'public', 'data', 'groups', groupId);
+        }
+        function getMessagesColRef(groupId) {
+            return collection(db, 'artifacts', appId, 'public', 'data', 'groups', groupId, 'messages');
+        }
+
+        // --- PeerJS və Qoşulma Məntiqi ---
+
+        function initializePeer(peerId) {
+            peer = new Peer(peerId);
+
+            peer.on('open', (id) => {
+                myPeerId = id;
+                document.getElementById('my-id-display').innerText = id;
+                console.log('Peer ID-niz:', id);
+
+                if (activeGroupId === id) {
+                    showChatPanel();
+                    listenToGroupChanges(id);
+                    listenToChatMessages(id);
+                } else if (activeGroupId) {
+                    connectToPeer(activeGroupId);
+                    showChatPanel();
+                    // Liderin cavabını gözləyərək qrup statusunu dinlə
+                    listenToGroupChanges(activeGroupId);
+                    listenToChatMessages(activeGroupId);
+                }
+                
+                document.getElementById('loading-spinner').classList.add('hidden');
+            });
+
+            peer.on('connection', (conn) => {
+                conn.on('open', () => handleNewConnection(conn, false));
+            });
+
+            peer.on('error', (err) => {
+                console.error("PeerJS Xətası:", err);
+                alertModal("Xəta", `PeerJS Xətası: ${err.type}. Yenidən cəhd edin.`, true);
+                document.getElementById('loading-spinner').classList.add('hidden');
+            });
+        }
+
+        function connectToPeer(targetId) {
+            if (targetId === myPeerId) return;
+
+            const conn = peer.connect(targetId);
+            conn.on('open', () => {
+                handleNewConnection(conn, true);
+                conn.send({ type: 'join', name: userName, userId: currentUserId, isLeader: isGroupLeader });
+            });
+        }
+
+        function handleNewConnection(conn, isOutgoing) {
+            if (connections[conn.peer]) return;
+
+            connections[conn.peer] = conn;
+            peerCount = Object.keys(connections).length + 1;
+
+            conn.on('data', (data) => handleData(data, conn.peer));
+            conn.on('close', () => handleDisconnect(conn.peer));
+            conn.on('error', (err) => console.error(`Əlaqə Xətası ${conn.peer}:`, err));
+
+            if (!isOutgoing && isGroupLeader) {
+                // Lider gələn qoşulmaya öz məlumatını göndərir
+                conn.send({ type: 'welcome', name: userName, leaderId: myPeerId, userId: currentUserId });
+                broadcast({ type: 'peer_join', name: 'Yeni Üzv', peerId: conn.peer }, conn.peer);
+            }
+        }
+        
+        function handleDisconnect(peerId) {
+            delete connections[peerId];
+            peerCount = Object.keys(connections).length + 1;
+            addSystemMessage(`İstifadəçi ${peerId.substring(0, 4)}... qrupdan ayrıldı.`, true);
+        }
+
+        function broadcast(data, excludePeerId = null) {
+            Object.values(connections).forEach(conn => {
+                if (conn.peer !== excludePeerId) {
+                    conn.send(data);
+                }
+            });
+        }
+        
+        // --- Əsas Məntiq Funksiyaları ---
+
+        window.joinGroup = async function() {
+            const usernameInput = document.getElementById('username-input');
+            const groupIdInput = document.getElementById('group-id-input');
+            const loadingSpinner = document.getElementById('loading-spinner');
+
+            if (!usernameInput.value.trim()) {
+                alertModal("Xəbərdarlıq", "Zəhmət olmasa, adınızı daxil edin.");
+                return;
+            }
+            
+            userName = escapeHtml(usernameInput.value.trim());
+            const requestedGroupId = groupIdInput.value.trim();
+            loadingSpinner.classList.remove('hidden');
+
+            try {
+                if (!currentUserId) {
+                    await new Promise(resolve => onAuthStateChanged(auth, resolve));
+                }
+
+                activeGroupId = requestedGroupId || currentUserId;
+                isGroupLeader = !requestedGroupId;
+
+                if (isGroupLeader) {
+                    await setDoc(getGroupDocRef(activeGroupId), {
+                        leaderId: currentUserId,
+                        leaderPeerId: activeGroupId,
+                        game: null,
+                        gameState: null,
+                        createdAt: new Date().getTime(),
+                    }, { merge: true });
+                    addSystemMessage(`Yeni qrup yaratdınız. Qrup ID-si: ${activeGroupId}`, true);
+                } else {
+                    addSystemMessage(`Qrupa qoşulur: ${activeGroupId}`, true);
+                }
+                
+                initializePeer(currentUserId); // currentUserId Peer ID kimi istifadə edilir
+            } catch (e) {
+                console.error("Qrupa qoşulma/yaratma xətası:", e);
+                alertModal("Xəta", "Qrupa qoşulmaq mümkün olmadı. Konsolu yoxlayın.");
+                loadingSpinner.classList.add('hidden');
+            }
+        };
+
+        // Qrup Dəyişikliklərini Dinləmək (Oyun Statusu)
+        function listenToGroupChanges(groupId) {
+            const groupRef = getGroupDocRef(groupId);
+            onSnapshot(groupRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    
+                    const oldGame = gameData.game;
+                    const oldState = gameData.state;
+
+                    gameData.game = data.game;
+                    gameData.state = data.gameState;
+                    
+                    // Oyun rollarını yenilə (Gizli Müştəri üçün)
+                    if (gameData.game === 'secret_customer' && gameData.state && gameData.state.players) {
+                        const myPlayer = gameData.state.players.find(p => p.peerId === myPeerId);
+                        gameData.myRole = myPlayer ? myPlayer.role : 'Gözləyən';
+                    } else if (!gameData.game) {
+                        gameData.myRole = null;
+                    }
+
+                    // Oyun bitdikdə sistem mesajı
+                    if (oldGame && !gameData.game && oldState) {
+                         addSystemMessage(`Oyun bitdi. Nəticəni yoxlayın.`, true);
+                    }
+                    
+                    renderGameStatus();
+                }
+            }, (error) => {
+                console.error("Firestore dinləmə xətası:", error);
+            });
+        }
+        
+        // Mesajları Dinləmək (Reaksiyalar daxil)
+        function listenToChatMessages(groupId) {
+            const messagesRef = getMessagesColRef(groupId);
+            const q = query(messagesRef);
+            
+            onSnapshot(q, (snapshot) => {
+                snapshot.docChanges().forEach((change) => {
+                    const msg = change.doc.data();
+                    const msgId = change.doc.id;
+                    
+                    if (change.type === "added") {
+                        // Yeni mesaj: Reaksiyasız əlavə et
+                        addMessageToUI(msg, msg.senderId === myPeerId, msgId);
+                        chatMessages[msgId] = msg;
+                    }
+                    
+                    if (change.type === "modified") {
+                        // Reaksiya dəyişikliyi: UI-ı yenilə
+                        chatMessages[msgId] = msg;
+                        updateMessageReactions(msgId, msg.reactions || {});
+                    }
+                });
+            }, (error) => {
+                console.error("Mesaj dinləmə xətası:", error);
+            });
+        }
+
+        // --- Çat, Mesaj və Reaksiya Məntiqi ---
+
+        window.sendMessage = function() {
+            const input = document.getElementById('message-input');
+            const messageText = input.value.trim();
+
+            if (messageText === '') return;
+            
+            // Oyunun gedişatını yoxla
+            if (gameData.game) {
+                handleGameAction(messageText);
+                input.value = '';
+                return;
+            } 
+            
+            // Normal çat mesajı
+            const message = {
+                senderId: myPeerId,
+                senderName: userName,
+                text: escapeHtml(messageText),
+                timestamp: new Date().toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' }),
+                reactions: {}, // {reactionType: count}
+                type: 'chat'
+            };
+
+            // Firestore-a yaz
+            addDoc(getMessagesColRef(activeGroupId), message).then(docRef => {
+                console.log("Mesaj yazıldı:", docRef.id);
+            }).catch(e => console.error("Mesaj yazılma xətası:", e));
+
+            input.value = '';
+        };
+
+        // Gələn PeerJS datasını idarə et
+        function handleData(data, peerId) {
+            switch (data.type) {
+                case 'join':
+                    addSystemMessage(`${data.name} qrupa qoşuldu.`, true);
+                    break;
+                case 'peer_join':
+                    addSystemMessage(`Yeni istifadəçi: ${peerId.substring(0, 4)}...`, true);
+                    break;
+                case 'welcome':
+                    addSystemMessage(`Lider ${data.leaderId.substring(0, 4)}... tərəfindən xoş gəldiniz.`, true);
+                    break;
+                case 'reaction':
+                    // Reaksiya PeerJS ilə göndərilmir, Firestore ilə işləyir.
+                    // Ancaq əgər reaksiya göndərilirsə, onu göstər:
+                    showReactionEffect(data.reactionType, data.senderName);
+                    break;
+                case 'game_msg':
+                    addSystemMessage(data.text, data.html);
+                    break;
+                default:
+                    console.warn("Naməlum data tipi:", data.type);
+            }
+        }
+        
+        // Mesajı çat sahəsinə əlavə et
+        function addMessageToUI(message, isMine, messageId) {
+            const messagesDiv = document.getElementById('messages');
+            let messageDiv = document.getElementById('msg-' + messageId);
+
+            if (messageDiv) return; // Mesaj artıq əlavə edilibsə geri qayıt
+
+            messageDiv = document.createElement('div');
+            messageDiv.id = 'msg-' + messageId;
+            
+            let messageClass = isMine ? 'self-end my-message' : 'self-start other-message';
+            let sender = isMine ? 'Siz' : message.senderName;
+            
+            messageDiv.className = `max-w-[80%] p-3 shadow-md ${messageClass} relative`;
+            messageDiv.innerHTML = `
+                <div class="text-xs font-semibold ${isMine ? 'text-gray-700' : 'text-gray-300'} mb-1">${sender}</div>
+                <p class="${isMine ? 'text-gray-800' : 'text-white'}">${message.text}</p>
+                <div class="text-[0.6rem] mt-1 text-right ${isMine ? 'text-gray-500' : 'text-gray-200'}">${message.timestamp}</div>
+                
+                <!-- Reaksiya Buttonu -->
+                <button onclick="toggleReactionMenu('${messageId}', event)" 
+                        class="absolute ${isMine ? 'left-0 transform -translate-x-full pr-1' : 'right-0 transform translate-x-full pl-1'} 
+                               top-1/2 -translate-y-1/2 text-lg hover:scale-110 transition-transform text-red-400">
+                    <i class="fas fa-plus-circle"></i>
+                </button>
+
+                <!-- Reaksiya Göstəricisi -->
+                <div id="reactions-${messageId}" 
+                     class="absolute -bottom-2 ${isMine ? 'left-0 ml-1' : 'right-0 mr-1'} bg-white text-xs p-1 rounded-full shadow-md flex space-x-1 opacity-90">
+                </div>
+            `;
+
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            updateMessageReactions(messageId, message.reactions || {});
+        }
+        
+        // Mesajın reaksiyalarını yenilə
+        function updateMessageReactions(messageId, reactions) {
+            const reactionDiv = document.getElementById(`reactions-${messageId}`);
+            if (!reactionDiv) return;
+
+            reactionDiv.innerHTML = '';
+            let totalReactions = 0;
+
+            if (reactions.tea && reactions.tea > 0) {
+                reactionDiv.innerHTML += `<span class="px-1 bg-yellow-100 rounded-full">☕ ${reactions.tea}</span>`;
+                totalReactions += reactions.tea;
+            }
+            if (reactions.flip && reactions.flip > 0) {
+                reactionDiv.innerHTML += `<span class="px-1 bg-red-100 rounded-full">🗑️ ${reactions.flip}</span>`;
+                totalReactions += reactions.flip;
+            }
+
+            if (totalReactions > 0) {
+                reactionDiv.classList.remove('hidden');
+            } else {
+                reactionDiv.classList.add('hidden');
+            }
+        }
+
+        // Reaksiya Menyu
+        window.toggleReactionMenu = function(messageId, event) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.getElementById('msg-' + messageId);
+            
+            // Əgər öz mesajımdırsa reaksiya qoymuram
+            if (messageDiv.classList.contains('my-message')) {
+                alertModal("Məlumat", "Öz mesajınıza reaksiya göndərə bilməzsiniz.");
+                return;
+            }
+
+            const menuId = `menu-${messageId}`;
+            let menu = document.getElementById(menuId);
+            
+            // Əvvəlki menuları bağla
+            document.querySelectorAll('.reaction-menu').forEach(m => {
+                if (m.id !== menuId) m.remove();
+            });
+
+            if (menu) {
+                menu.remove();
+                return;
+            }
+
+            // Yeni menyu yarat
+            const menuHtml = `
+                <div id="${menuId}" class="reaction-menu bg-white rounded-full shadow-xl flex p-1 space-x-1 border border-gray-200">
+                    <button onclick="sendReaction('${messageId}', 'tea', '${messageDiv.querySelector('.text-xs').textContent}')" class="p-2 text-2xl hover:bg-yellow-100 rounded-full transition-colors" title="Çay Süz (Bəyənmə)">☕</button>
+                    <button onclick="sendReaction('${messageId}', 'flip', '${messageDiv.querySelector('.text-xs').textContent}')" class="p-2 text-2xl hover:bg-red-100 rounded-full transition-colors" title="Stəkan Fırlat (Bəyənməmə)">🗑️</button>
+                </div>
+            `;
+            messageDiv.insertAdjacentHTML('beforeend', menuHtml);
+        }
+
+        // Reaksiya Göndərmək (Firestore Transaction)
+        window.sendReaction = async function(messageId, reactionType, senderName) {
+            document.getElementById(`menu-${messageId}`)?.remove();
+
+            const messageRef = doc(getMessagesColRef(activeGroupId), messageId);
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const doc = await transaction.get(messageRef);
+                    if (!doc.exists()) {
+                        throw "Mesaj tapılmadı!";
+                    }
+
+                    const newReactions = doc.data().reactions || {};
+                    newReactions[reactionType] = (newReactions[reactionType] || 0) + 1;
+
+                    transaction.update(messageRef, { reactions: newReactions });
+                });
+
+                // Reaksiyanı bütün Peerlərə göstər (vizual effekt üçün)
+                broadcast({ type: 'reaction', reactionType: reactionType, senderName: userName });
+                showReactionEffect(reactionType, userName);
+
+            } catch (e) {
+                console.error("Reaksiya göndərmə xətası:", e);
+                alertModal("Xəta", "Reaksiya göndərilmədi.");
+            }
+        }
+        
+        // Reaksiya Vizual və Səs Effektini Göstər
+        function showReactionEffect(reactionType, senderName) {
+            const container = document.getElementById('reaction-container');
+            const effect = document.createElement('div');
+            
+            let emoji = reactionType === 'tea' ? '☕' : '🗑️';
+            let soundNote = reactionType === 'tea' ? 'C5' : 'F4';
+            let soundDuration = reactionType === 'tea' ? '8n' : '16n';
+            let soundType = reactionType === 'tea' ? 'sine' : 'square';
+
+            effect.className = `reaction-effect ${reactionType === 'flip' ? 'flip-animate' : ''}`;
+            effect.textContent = emoji;
+            
+            container.appendChild(effect);
+
+            // Səs Effektini Oynat
+            Tone.start().then(() => {
+                synth.triggerAttackRelease(soundNote, soundDuration, undefined, 0.5, soundType);
+            });
+
+            // Elementi sil
+            setTimeout(() => {
+                effect.remove();
+            }, 1500);
+        }
+        
+        // Sistem mesajını əlavə et
+        function addSystemMessage(text, isHtml = false) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'text-center text-xs system-message p-2';
+            
+            if (isHtml) {
+                messageDiv.innerHTML = text;
+            } else {
+                messageDiv.textContent = text;
+            }
+
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // --- Oyun Məntiqi: Kəllə-Kəlləyə (Hangman) və Gizli Müştəri ---
+
+        const hangmanWords = ['proqramlaşdırma', 'kodlaşdırma', 'alqoritm', 'şəbəkə', 'server', 'kompüter'];
+        const MAX_MISSES = 6;
+        const SECRET_CUSTOMER_ROLES = ['Kassir', 'Barista', 'Servisçi', 'Təmizlikçi'];
+        const SECRET_CUSTOMER_ORDERS = [
+            'Bir latte istəyirəm.', 
+            'Masa 2-də çay istəyirlər.', 
+            'Süfrələrdən biri çirkli qalıb, təmizləyin.', 
+            'Qapıdan yeni müştəri gəldi, buyurun.',
+            'Hesab istəyirlər.'
+        ];
+
+        // Oyunun Hazırlanması (Gizli Müştəri)
+        function initializeSecretCustomer() {
+            const allPlayers = Object.keys(connections).concat(myPeerId).map(id => ({ peerId: id, name: connections[id]?.peerName || (id === myPeerId ? userName : 'Anonim'), role: null, votes: 0 }));
+
+            if (allPlayers.length < 4) {
+                 alertModal("Xəbərdarlıq", `Gizli Müştəri oyunu üçün ən az 4 oyunçu lazımdır. Hazırda: ${allPlayers.length}`);
+                 return null;
+            }
+
+            // Rolları payla
+            const customerIndex = Math.floor(Math.random() * allPlayers.length);
+            allPlayers[customerIndex].role = 'Gizli Müştəri';
+
+            let staffRoles = [...SECRET_CUSTOMER_ROLES];
+            let staffCount = 0;
+            for (let i = 0; i < allPlayers.length; i++) {
+                if (i !== customerIndex) {
+                    allPlayers[i].role = staffRoles[staffCount % staffRoles.length];
+                    staffCount++;
+                }
+            }
+
+            return {
+                status: 'roles_assigned', // rolls_assigned, orders, discussion, voting, finished
+                players: allPlayers,
+                secretCustomer: allPlayers[customerIndex].peerId,
+                rounds: 1,
+                currentOrder: null,
+                responses: {}, // {peerId: responseText}
+                votes: {}, // {voterId: votedId}
+                votingTarget: null, // Səsvermədə hədəf
+                maxRounds: 3 // Maksimum 3 raund
+            };
+        }
+
+        // Oyunun Statusunu Yenilə (Yalnız Lider)
+        async function updateGroupGameStatus(game, newState) {
+            if (!isGroupLeader || !activeGroupId) return;
+            
+            await updateDoc(getGroupDocRef(activeGroupId), {
+                game: game,
+                gameState: newState
+            });
+        }
+        
+        // Oyun Hərəkətlərini İdarə Et (Lider tərəfindən)
+        function handleGameAction(messageText) {
+            if (gameData.game === 'hangman') {
+                handleHangmanGuess(messageText);
+            } else if (gameData.game === 'secret_customer') {
+                handleSecretCustomerAction(messageText);
+            }
+        }
+        
+        async function handleSecretCustomerAction(text) {
+             const state = gameData.state;
+             const normalizedText = escapeHtml(text).trim();
+
+             if (state.status === 'orders') {
+                // Sifarişlərə cavab vermə mərhələsi
+                if (state.responses[myPeerId]) {
+                    addSystemMessage("Siz artıq sifarişə cavab vermisiniz.", false);
+                    return;
+                }
+                
+                // Cavabı qeyd et
+                state.responses[myPeerId] = normalizedText;
+                
+                // Hər kəs cavab verdikdə (Özümüz + qoşulmalar)
+                if (Object.keys(state.responses).length === state.players.length) {
+                    state.status = 'discussion';
+                    
+                    let allResponses = "Cavablar:\n";
+                    state.players.forEach(p => {
+                        allResponses += `**${p.name} (${p.role})**: ${state.responses[p.peerId] || 'Cavab yoxdur'}\n`;
+                    });
+
+                    const msg = `*** DİQQƏT! *** Bütün cavablar alındı. İndi kimin **Gizli Müştəri** olduğuna dair müzakirə başlayır. Kim qəribə davrandı?`;
+                    addSystemMessage(msg, true);
+                    broadcast({ type: 'game_msg', text: msg, html: true });
+                }
+
+                await updateGroupGameStatus('secret_customer', state);
+                
+             } else if (state.status === 'discussion') {
+                 // Müzakirə mərhələsi - yalnız çat
+                 const message = {
+                    senderId: myPeerId,
+                    senderName: userName,
+                    text: normalizedText,
+                    timestamp: new Date().toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' }),
+                    reactions: {}, 
+                    type: 'chat'
+                 };
+                 addDoc(getMessagesColRef(activeGroupId), message);
+                 
+             } else if (state.status === 'voting') {
+                // Səsvermə mərhələsi
+                const votedPlayer = state.players.find(p => p.name.toLowerCase() === normalizedText.toLowerCase());
+
+                if (!votedPlayer) {
+                    addSystemMessage(`Oyunçu adı səhvdir. Zəhmət olmasa, tam və düzgün adı yazın: ${state.players.map(p => p.name).join(', ')}`, false);
+                    return;
+                }
+
+                if (state.votes[myPeerId]) {
+                    addSystemMessage("Siz artıq səs vermisiniz.", false);
+                    return;
+                }
+                
+                state.votes[myPeerId] = votedPlayer.peerId;
+                
+                // Hər kəs səs verdikdə
+                if (Object.keys(state.votes).length === state.players.length) {
+                    state.status = 'finished';
+                    finalizeSecretCustomerGame(state);
+                } else {
+                    await updateGroupGameStatus('secret_customer', state);
+                }
+             }
+        }
+        
+        // Oyun Statusunu UI-da Göstər
+        function renderGameStatus() {
+            const statusDiv = document.getElementById('game-status-display');
+            
+            if (gameData.game === 'hangman' && gameData.state) {
+                // Kəllə-Kəlləyə statusu
+                const state = gameData.state;
+                const { display } = getHangmanDisplay(state);
+                
+                statusDiv.classList.remove('hidden');
+                statusDiv.className = 'p-3 bg-yellow-50 border border-yellow-300 rounded-lg m-3 shadow-inner';
+                statusDiv.innerHTML = `
+                    <div class="text-sm font-semibold text-red-800">
+                        <i class="fas fa-gavel mr-1"></i> KƏLLƏ-KƏLLƏYƏ OYUNU
+                    </div>
+                    <div class="mt-1 text-base text-gray-700">
+                        Söz: <span class="font-mono text-xl tracking-widest">${display.split('').join(' ')}</span>
+                    </div>
+                    <div class="mt-1 text-sm text-gray-600">
+                        Qalan Cəza: <span class="font-bold text-red-600">${state.missesLeft}</span>
+                        | Təxminlər: ${state.guessedLetters.sort().join(', ') || 'heç biri'}
+                    </div>
+                `;
+            } else if (gameData.game === 'secret_customer' && gameData.state) {
+                // Gizli Müştəri statusu
+                const state = gameData.state;
+                let statusText = '';
+                
+                if (state.status === 'roles_assigned' || state.status === 'orders' || state.status === 'discussion' || state.status === 'voting') {
+                    statusDiv.className = 'p-3 bg-red-100 border border-red-300 rounded-lg m-3 shadow-inner';
+                    
+                    let roleDisplay = gameData.myRole === 'Gizli Müştəri' ? '<span class="text-red-700 font-bold">Gizli Müştəri</span>' : `<span class="text-green-700 font-bold">${gameData.myRole}</span>`;
+                    
+                    statusText += `<div class="text-sm font-semibold text-red-800 flex justify-between items-center">
+                        <i class="fas fa-user-secret mr-1"></i> GİZLİ MÜŞTƏRİ
+                        <span class="text-xs text-red-500">Raund: ${state.rounds}/${state.maxRounds}</span>
+                    </div>
+                    <div class="mt-2 text-base text-gray-800">
+                        <span class="font-bold">Sizin Rolunuz:</span> ${roleDisplay}
+                    </div>`;
+
+                    if (state.status === 'orders') {
+                        let respondedCount = Object.keys(state.responses).length;
+                        statusText += `<div class="mt-1 text-sm text-gray-600">
+                            <span class="font-bold">Hazırkı Sifariş:</span> ${state.currentOrder}
+                        </div>
+                        <div class="mt-1 text-xs text-gray-500">
+                            Cavab Verənlər: ${respondedCount}/${state.players.length} | Cavabınızı çata yazın.
+                        </div>`;
+                    } else if (state.status === 'discussion') {
+                        statusText += `<div class="mt-1 text-sm text-red-700 font-bold">
+                            Müzakirə Mərhələsi: Kim şübhəlidir? Çatda müzakirə edin.
+                        </div>
+                        <button onclick="startSecretCustomerVote()" class="mt-2 w-full bg-red-700 hover:bg-red-600 text-white text-sm font-bold py-1 rounded-lg">
+                            Səsverməyə Başla (Yalnız Lider)
+                        </button>`;
+                    } else if (state.status === 'voting') {
+                        let votedCount = Object.keys(state.votes).length;
+                         let myVoteStatus = state.votes[myPeerId] ? `✅ Səs verdiniz.` : `❌ Gözləyir`;
+                        statusText += `<div class="mt-1 text-sm text-red-700 font-bold">
+                            Səsvermə Mərhələsi! <span class="font-normal text-gray-600">(Adı çata yazın)</span>
+                        </div>
+                        <div class="mt-1 text-xs text-gray-500">
+                             Səs Verənlər: ${votedCount}/${state.players.length} | ${myVoteStatus}
+                        </div>
+                        <div class="mt-1 text-sm text-gray-600">
+                            Oyunçular: ${state.players.map(p => p.name).join(', ')}
+                        </div>`;
+                    }
+                    
+                } else if (state.status === 'finished') {
+                    // Oyunun bitmə nəticəsi
+                    statusDiv.className = 'p-3 bg-green-100 border border-green-300 rounded-lg m-3 shadow-inner';
+                    statusText = `
+                        <div class="text-lg font-bold text-green-700">OYUN BİTDİ!</div>
+                        <div class="text-sm mt-1">Nəticəni çata yazılan sistem mesajından oxuyun.</div>
+                        <button onclick="endSecretCustomerGame()" class="mt-2 w-full bg-green-700 hover:bg-green-600 text-white text-sm font-bold py-1 rounded-lg">
+                            Oyunun Nəticəsini Göstər (Yalnız Lider)
+                        </button>
+                    `;
+                }
+
+                statusDiv.innerHTML = statusText;
+                statusDiv.classList.remove('hidden');
+
+            } else {
+                statusDiv.classList.add('hidden');
+            }
+            // Hər yenilənmədə çatı ən aşağıya endir
+            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+        }
+
+        // Gizli Müştəri - Növbəti Addım (Yalnız Lider)
+        function advanceSecretCustomerGame() {
+            if (!isGroupLeader || gameData.game !== 'secret_customer') return;
+            const state = gameData.state;
+
+            if (state.status === 'roles_assigned' || state.status === 'discussion') {
+                // Sifariş mərhələsinə keç
+                const orderIndex = Math.floor(Math.random() * SECRET_CUSTOMER_ORDERS.length);
+                state.currentOrder = SECRET_CUSTOMER_ORDERS[orderIndex];
+                state.responses = {}; // Cavabları sıfırla
+                state.status = 'orders';
+                
+                const msg = `*** YENİ SİFARİŞ! (Raund ${state.rounds}) ***<br><span class="text-xl font-bold text-red-700">${state.currentOrder}</span><br>Rollarınıza uyğun cavabınızı çata yazın! Gizli Müştəri çaşdırmağa çalışır.`;
+                addSystemMessage(msg, true);
+                broadcast({ type: 'game_msg', text: msg, html: true });
+
+            } else if (state.status === 'orders') {
+                // Sifariş mərhələsi avtomatik olaraq cavablar bitdikdə 'discussion'a keçir (handleSecretCustomerAction daxilində)
+                return;
+            } else if (state.status === 'voting') {
+                 // Səsvermə mərhələsi avtomatik olaraq səs bitdikdə 'finished'ə keçir
+                 return;
+            }
+            
+            updateGroupGameStatus('secret_customer', state);
+        }
+        
+        // Gizli Müştəri - Səsverməyə Başla (Yalnız Lider)
+        window.startSecretCustomerVote = function() {
+            if (!isGroupLeader || gameData.game !== 'secret_customer' || gameData.state.status !== 'discussion') {
+                 alertModal("Xəbərdarlıq", "Səsverməyə başlamaq üçün qrup rəhbəri olmalı və müzakirə mərhələsində olmalısınız.");
+                 return;
+            }
+            
+            const state = gameData.state;
+            state.status = 'voting';
+            state.votes = {}; // Səsləri sıfırla
+            
+            const msg = `*** SƏSVERMƏ BAŞLADI! ***<br>Sizcə kim Gizli Müştəridir? Şübhələndiyiniz oyunçunun <span class="text-red-700 font-bold">ADINI TAM ŞƏKİLDƏ</span> çata yazın. Hər kəs yalnız bir dəfə səs verə bilər.`;
+            addSystemMessage(msg, true);
+            broadcast({ type: 'game_msg', text: msg, html: true });
+            
+            updateGroupGameStatus('secret_customer', state);
+        }
+
+        // Gizli Müştəri - Nəticələndir (Yalnız Lider)
+        function finalizeSecretCustomerGame(state) {
+            // Səsləri say
+            const voteCounts = {};
+            Object.values(state.votes).forEach(votedId => {
+                voteCounts[votedId] = (voteCounts[votedId] || 0) + 1;
+            });
+
+            // Ən çox səs alan
+            let mostVotedId = null;
+            let maxVotes = 0;
+            for (const id in voteCounts) {
+                if (voteCounts[id] > maxVotes) {
+                    maxVotes = voteCounts[id];
+                    mostVotedId = id;
+                }
+            }
+
+            const isCustomerFound = mostVotedId === state.secretCustomer;
+            const customerName = state.players.find(p => p.peerId === state.secretCustomer)?.name || 'Naməlum';
+            const votedName = state.players.find(p => p.peerId === mostVotedId)?.name || 'Heç kim';
+            
+            let resultMsg = `<span class="text-2xl font-bold">*** OYUN BİTDİ: NƏTİCƏ ***</span><br>`;
+            resultMsg += `Həqiqi Gizli Müştəri: <span class="text-red-700 font-bold">${customerName}</span><br>`;
+            resultMsg += `Ən çox səs alan: <span class="text-red-700 font-bold">${votedName}</span> (${maxVotes} səs)<br><br>`;
+
+            if (isCustomerFound) {
+                resultMsg += `<span class="text-green-700 font-bold text-xl">AFƏRİN! Personal Qalib gəldi!</span> Gizli Müştəri uğurla ifşa edildi.`;
+            } else {
+                resultMsg += `<span class="text-blue-700 font-bold text-xl">GİZLİ MÜŞTƏRİ Qalib gəldi!</span> O, ifşa edilmədi.`;
+            }
+            
+            addSystemMessage(resultMsg, true);
+            broadcast({ type: 'game_msg', text: resultMsg, html: true });
+
+            // Raundları artır (Əgər təkrar oynanılacaqsa)
+            if (state.rounds < state.maxRounds && !isCustomerFound) {
+                 state.status = 'roles_assigned'; // Yeni raunda hazırlaş
+                 state.rounds++;
+                 updateGroupGameStatus('secret_customer', state);
+                 
+                 const nextRoundMsg = `*** Növbəti Raund ***<br>Gizli Müştəri qaçdı! Yeni rollar paylanır. Lider, zəhmət olmasa **Başla** düyməsini basın.`;
+                 addSystemMessage(nextRoundMsg, true);
+                 broadcast({ type: 'game_msg', text: nextRoundMsg, html: true });
+            } else {
+                 // Oyunu tamamilə bitir
+                 updateGroupGameStatus(null, null);
+            }
+        }
+        
+        // Gizli Müştəri - Tamamilə Bitir (Yalnız Lider)
+        window.endSecretCustomerGame = function() {
+            if (!isGroupLeader) return;
+            updateGroupGameStatus(null, null);
+        }
+
+        // Kəllə-Kəlləyə - Təxmin Məntiqi (Yalnız Lider)
+        function initializeHangman() { /* ... əvvəlki kimi ... */
+            const word = hangmanWords[Math.floor(Math.random() * hangmanWords.length)];
+            return {
+                word: word,
+                guessedLetters: [],
+                missesLeft: MAX_MISSES,
+                guessedWord: null,
+            };
+        }
+        function getHangmanDisplay(state) { /* ... əvvəlki kimi ... */
+            let display = '';
+            let isComplete = true;
+            for (const char of state.word) {
+                if (state.guessedLetters.includes(char)) {
+                    display += char;
+                } else {
+                    display += '_';
+                    isComplete = false;
+                }
+            }
+            state.guessedWord = display;
+            return { display, isComplete };
+        }
+        async function handleHangmanGuess(guess) {
+            if (!gameData.game || gameData.game !== 'hangman' || !isGroupLeader) {
+                 addSystemMessage("Hazırda oyun aktiv deyil və ya siz lider deyilsiniz.", false);
+                 return;
+            }
+            
+            const normalizedGuess = guess.toLowerCase().trim();
+            
+            const state = gameData.state;
+            let resultMessage = '';
+
+            if (normalizedGuess.length === 1) {
+                if (state.guessedLetters.includes(normalizedGuess)) {
+                    resultMessage = `Hərf '${normalizedGuess}' artıq təxmin edilib.`;
+                } else {
+                    state.guessedLetters.push(normalizedGuess);
+                    if (state.word.includes(normalizedGuess)) {
+                        resultMessage = `Əla! Hərf '${normalizedGuess}' sözdə var.`;
+                    } else {
+                        state.missesLeft--;
+                        resultMessage = `Yanlışdır. Qalan cəza: ${state.missesLeft}`;
+                    }
+                }
+            } else {
+                if (normalizedGuess === state.word) {
+                    resultMessage = `*** TƏBRİKLƏR! *** Sözü düzgün tapdı: **${state.word}**`;
+                    state.guessedWord = state.word;
+                } else {
+                    state.missesLeft--;
+                    resultMessage = `Yanlış söz. Qalan cəza: ${state.missesLeft}`;
+                }
+            }
+
+            const { display, isComplete } = getHangmanDisplay(state);
+
+            if (isComplete || normalizedGuess === state.word || state.missesLeft <= 0) {
+                 // Qalibiyyət/Məğlubiyyət
+                if (normalizedGuess === state.word || isComplete) {
+                     resultMessage = `*** OYUN BİTDİ: QALİBİYYƏT! *** Tapılan söz: **${state.word}**`;
+                } else {
+                     resultMessage = `*** OYUN BİTDİ: MƏĞLUBİYYƏT! *** Söz: **${state.word}** idi.`;
+                }
+
+                await updateGroupGameStatus(null, null); // Oyunu bitir
+                
+            } else {
+                // Oyuna davam
+                resultMessage += `<br><br>Söz: <span class="hangman-display font-mono text-xl tracking-widest">${display.split('').join(' ')}</span><br>Qalan Cəza: ${state.missesLeft}<br>Təxmin edilmiş hərflər: ${state.guessedLetters.sort().join(', ') || 'heç biri'}`;
+                await updateGroupGameStatus('hangman', state);
+            }
+            
+            addSystemMessage(resultMessage, true);
+            broadcast({ type: 'game_msg', text: resultMessage, html: true });
+            renderGameStatus();
+        }
+
+        // --- UI Məntiqi ---
+
+        // Oyun Seçim panelini göstərmək/gizlətmək
+        window.toggleGameSelector = function() {
+            const selector = document.getElementById('game-selector');
+            const isHidden = selector.classList.contains('hidden');
+            
+            if (isHidden) {
+                selector.classList.remove('hidden');
+                setTimeout(() => {
+                    selector.classList.remove('game-selector-enter');
+                    selector.classList.add('game-selector-enter-active');
+                }, 10);
+            } else {
+                selector.classList.remove('game-selector-enter-active');
+                selector.classList.add('game-selector-exit-active');
+                setTimeout(() => {
+                    selector.classList.add('hidden');
+                    selector.classList.remove('game-selector-exit-active');
+                    selector.classList.add('game-selector-enter');
+                }, 200);
+            }
+        }
+
+        // Oyun seçildikdə həm oyunu başlamaq, həm də paneli gizlətmək
+        window.selectGame = async function(gameName) {
+            toggleGameSelector(); 
+
+            if (!isGroupLeader) {
+                alertModal("Xəbərdarlıq", "Siz qrup rəhbəri deyilsiniz. Yalnız qrup rəhbəri oyun başlada bilər.");
+                return;
+            }
+            
+            if (gameData.game) {
+                 alertModal("Xəbərdarlıq", `Hazırda artıq bir oyun (${gameData.game}) aktivdir.`);
+                 return;
+            }
+
+            if (gameName === 'hangman') {
+                const initialState = initializeHangman();
+                const { display } = getHangmanDisplay(initialState);
+                
+                await updateGroupGameStatus('hangman', initialState);
+                
+                const startMsg = `
+                    *** YENİ OYUN: Kəllə-Kəlləyə başladı! ***<br>
+                    Söz: <span class="hangman-display font-mono text-xl tracking-widest">${display.split('').join(' ')}</span><br>
+                    Qalan Cəza: ${initialState.missesLeft} <br>
+                    Çata hərf və ya tam sözü yazın.
+                `;
+                
+                addSystemMessage(startMsg, true);
+                broadcast({ type: 'game_msg', text: startMsg, html: true });
+                
+            } else if (gameName === 'secret_customer') {
+                const initialState = initializeSecretCustomer();
+                if (!initialState) return;
+                
+                await updateGroupGameStatus('secret_customer', initialState);
+                
+                // Rolları oyunçulara fərdi şəkildə bildir
+                initialState.players.forEach(p => {
+                    const roleMsg = p.peerId === initialState.secretCustomer ? 
+                        `*** SİZİN ROLUNUZ: GİZLİ MÜŞTƏRİ ***<br>Sifarişlərə qarışıq cavab verin.` : 
+                        `*** SİZİN ROLUNUZ: ${p.role} ***<br>Sifarişlərə normal cavab verin və Müştərini tapın.`;
+                    
+                    if (p.peerId === myPeerId) {
+                         alertModal("Rolunuz!", roleMsg);
+                    } else if (connections[p.peerId]) {
+                         connections[p.peerId].send({ type: 'game_msg', text: roleMsg, html: true });
+                    }
+                });
+
+                const startMsg = `*** YENİ OYUN: Gizli Müştəri başladı! ***<br>Rollar paylandı. ${initialState.players.length} nəfər oynayır.`;
+                addSystemMessage(startMsg, true);
+                broadcast({ type: 'game_msg', text: startMsg, html: true });
+
+                // Birinci sifarişi ver
+                advanceSecretCustomerGame();
+
+            } else if (gameName === 'quiz') {
+                 alertModal("Məlumat", "Quiz oyunu hələ hazırlanma mərhələsindədir.");
+            }
+        }
+        
+        // Qrupdan Ayrılmaq
+        window.leaveGroup = function() {
+            if (peer) {
+                Object.values(connections).forEach(conn => conn.close());
+                peer.destroy();
+                peer = null;
+            }
+            
+            // UI-ı sıfırla
+            document.getElementById('chat-panel').classList.add('hidden');
+            document.getElementById('join-panel').classList.remove('hidden');
+            
+            // Vəziyyətləri sıfırla
+            myPeerId = null;
+            connections = {};
+            isGroupLeader = false;
+            gameData = { game: null, state: null, myRole: null };
+            activeGroupId = null;
+            peerCount = 0;
+            chatMessages = {}; // Mesaj yaddaşını təmizlə
+            
+            document.getElementById('messages').innerHTML = '';
+            document.getElementById('group-id-input').value = '';
+            addSystemMessage("Siz qrupdan ayrıldınız. Yeni qrupa qoşulun.", true);
+        }
+
+        // --- Köməkçi funksiyalar ---
+        
+        // Panellərin dəyişdirilməsi
+        function showChatPanel() {
+            document.getElementById('join-panel').classList.add('hidden');
+            document.getElementById('chat-panel').classList.remove('hidden');
+            renderGameStatus();
+        }
+
+        // Enter düyməsi ilə mesaj göndərmək
+        window.handleKeyPress = function(e) { 
+            if (e.key === 'Enter') sendMessage(); 
+        }
+
+        // ID-ni kopyalamaq
+        window.copyId = function() {
+            const idToCopy = document.getElementById('my-id-display').innerText;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(idToCopy).then(() => {
+                    const msg = document.getElementById('copy-msg'); msg.style.opacity = '1';
+                    setTimeout(() => msg.style.opacity = '0', 2000);
+                }).catch(err => {
+                    console.error('Kopyalama xətası:', err);
+                });
+            } else {
+                 alertModal("Xəbərdarlıq", "Kopyalama funksiyası brauzerinizdə dəstəklənmir.");
+            }
+        }
+        
+        // Xəbərdarlıq/Məlumat Modalı (alert() yerinə)
+        function alertModal(title, message) {
+            const existingModal = document.getElementById('custom-modal');
+            if (existingModal) existingModal.remove();
+
+            const modalHtml = `
+                <div id="custom-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm transform scale-100 transition-transform duration-300">
+                        <h3 class="text-xl font-bold mb-4 text-red-800">${title}</h3>
+                        <p class="text-gray-700 mb-6">${message}</p>
+                        <button onclick="document.getElementById('custom-modal').remove()" 
+                                class="w-full bg-red-800 hover:bg-red-700 text-white font-bold py-2 rounded-lg transition duration-200">
+                            Başa Düşdüm
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        // HTML-dən qaçış (escape) funksiyası
+        function escapeHtml(text) { 
+            if (typeof text !== 'string') return text;
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '\"': '&quot;',
+                "\'": '&#039;'
+            };
+            return text.replace(/[&<>\"']/g, (m) => map[m]);
+        }
+    </script>
+</body>
+</html>
